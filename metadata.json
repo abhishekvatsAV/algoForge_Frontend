@@ -1,0 +1,5 @@
+{
+  "name": "AlgoForge",
+  "description": "A modern, minimal, developer-first web app to generate algorithm problems, write code, and run tests.",
+  "requestFramePermissions": []
+}

@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AlgoForge</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        'light-bg': '#F7F8FA',
+                        'light-surface': '#FFFFFF',
+                        'light-surface-2': '#F2F4F7',
+                        'light-text-primary': '#0F1724',
+                        'light-text-secondary': '#475569',
+                        'light-accent': '#0EA5A4',
+                        'light-accent-hover': '#089187',
+                        'light-success': '#16A34A',
+                        'light-danger': '#EF4444',
+                        'light-muted': '#94A3B8',
+                        'light-border': '#E6E9EE',
+                        'dark-bg': '#0B1220',
+                        'dark-surface': '#0E1624',
+                        'dark-surface-2': '#111827',
+                        'dark-text-primary': '#E6EEF3',
+                        'dark-text-secondary': '#9AA8B3',
+                        'dark-accent': '#22C1B8',
+                        'dark-accent-hover': '#14b8a6',
+                        'dark-success': '#34D399',
+                        'dark-danger': '#FB7185',
+                        'dark-border': '#1F2A37',
+                        'difficulty-easy': '#10B981',
+                        'difficulty-medium': '#F59E0B',
+                        'difficulty-hard': '#EF4444',
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'ui-monospace', 'monospace']
+                    },
+                    borderRadius: {
+                        'md': '8px',
+                    },
+                    spacing: {
+                        '8': '8px',
+                        '16': '16px',
+                        '24': '24px',
+                        '32': '32px',
+                        '48': '48px',
+                        '64': '64px',
+                    },
+                    boxShadow: {
+                        'soft': '0 6px 18px rgba(10,10,10,0.06)',
+                        'soft-dark': '0 8px 28px rgba(0,0,0,0.6)',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+      body {
+          -webkit-font-smoothing: antialiased;
+          -moz-osx-font-smoothing: grayscale;
+      }
+      @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+      @keyframes scaleIn {
+        from { opacity: 0; transform: scale(0.95); }
+        to { opacity: 1; transform: scale(1); }
+      }
+      .animate-fade-in {
+        animation: fadeIn 0.2s ease-out forwards;
+      }
+      .animate-scale-in {
+        animation: scaleIn 0.2s ease-out forwards;
+      }
+    </style>
+<script type="importmap">
+{
+  "imports": {
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.22.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "react-router-dom": "https://aistudiocdn.com/react-router-dom@^7.9.3"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+<body class="bg-light-bg dark:bg-dark-bg font-sans">
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+</body>
+</html>
