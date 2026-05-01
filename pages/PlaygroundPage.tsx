@@ -415,7 +415,7 @@ const PlaygroundPage: React.FC = () => {
                 : 'border-light-border text-light-text-secondary dark:border-dark-border dark:text-dark-text-secondary'
             }`}
           >
-            Run
+            Run Output
           </button>
           <button
             onClick={() => setActiveConsoleView('submit')}
@@ -425,7 +425,7 @@ const PlaygroundPage: React.FC = () => {
                 : 'border-light-border text-light-text-secondary dark:border-dark-border dark:text-dark-text-secondary'
             }`}
           >
-            Submit
+            Submission Result
           </button>
         </div>
       </div>
