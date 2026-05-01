@@ -1,0 +1,37 @@
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+}
+
+.flexlayout__layout {
+  border-radius: 8px;
+  overflow: hidden;
+  background: transparent;
+}
+
+.flexlayout__theme_dark .flexlayout__tabset_header {
+  background: #0e1624;
+  border-bottom: 1px solid #1f2a37;
+}
+
+.flexlayout__theme_dark .flexlayout__tabset-content {
+  background: #0b1220;
+}
+
+.flexlayout__theme_light .flexlayout__tabset_header {
+  background: #ffffff;
+  border-bottom: 1px solid #e6e9ee;
+}
+
+.flexlayout__theme_light .flexlayout__tabset-content {
+  background: #f7f8fa;
+}
+
+.flexlayout__tab_button--selected {
+  font-weight: 600;
+}

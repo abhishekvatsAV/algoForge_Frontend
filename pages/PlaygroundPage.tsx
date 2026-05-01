@@ -1,5 +1,9 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import Editor from '@monaco-editor/react';
+import { IJsonModel, Layout, Model, TabNode } from 'flexlayout-react';
+import 'flexlayout-react/style/light.css';
+import 'flexlayout-react/style/dark.css';
 import { Problem, Language } from '../types';
 import { DUMMY_PROBLEMS } from '../constants';
 import { generateProblem, getLatestProblem, getAllProblems } from '../services/geminiService';
@@ -8,40 +12,66 @@ import Pill from '../components/Pill';
 import Button from '../components/Button';
 import { ProblemSkeleton } from '../components/SkeletonLoader';
 import { useAuth } from '../hooks/useAuth';
-// import { BACKEND_URL } from '../config';
-const BACKEND_URL = process.env.BACKEND_URL;
+import { useTheme } from '../hooks/useTheme';
 
-const ChevronDownIcon: React.FC<{ className?: string }> = ({ className }) => (
-  <svg xmlns="http://www.w3.org/2000/svg" className={className} fill="none" viewBox="0 0 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
-);
+const BACKEND_URL = process.env.BACKEND_URL;
 
 const PlaygroundPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { token, isAuthenticated, openLoginModal } = useAuth();
+  const { theme } = useTheme();
+
   const [problem, setProblem] = useState<Problem | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showGeneratePrompt, setShowGeneratePrompt] = useState(false);
   const [language, setLanguage] = useState<Language>('cpp');
   const [code, setCode] = useState('');
-
-  // Console state
   const [customInput, setCustomInput] = useState('');
   const [runOutput, setRunOutput] = useState('Click "Run" to see the output for your custom input here.');
   const [submissionResult, setSubmissionResult] = useState<{ status: 'Accepted' | 'Error'; message: string } | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [activeConsoleView, setActiveConsoleView] = useState<'run' | 'submit'>('run');
+  const layoutRef = useRef<Model | null>(null);
 
-  // Resizable panel state
-  const containerRef = useRef<HTMLDivElement>(null);
-  const rightColumnRef = useRef<HTMLDivElement>(null);
-  const [leftPanelWidth, setLeftPanelWidth] = useState(420);
-  const [editorPanelHeight, setEditorPanelHeight] = useState(400);
-  const [isDraggingHorizontal, setIsDraggingHorizontal] = useState(false);
-  const [isDraggingVertical, setIsDraggingVertical] = useState(false);
-  const [isConsoleOpen, setIsConsoleOpen] = useState(true);
-  const lastEditorHeight = useRef(editorPanelHeight);
+  if (!layoutRef.current) {
+    const layoutConfig: IJsonModel = {
+      global: {
+        tabEnableClose: false,
+        tabSetEnableMaximize: true,
+      },
+      layout: {
+        type: 'row',
+        weight: 100,
+        children: [
+          {
+            type: 'tabset',
+            weight: 38,
+            children: [{ type: 'tab', name: 'Problem', component: 'problem' }],
+          },
+          {
+            type: 'row',
+            weight: 62,
+            children: [
+              {
+                type: 'tabset',
+                weight: 62,
+                children: [{ type: 'tab', name: 'Code Editor', component: 'editor' }],
+              },
+              {
+                type: 'tabset',
+                weight: 38,
+                children: [{ type: 'tab', name: 'Console', component: 'console' }],
+              },
+            ],
+          },
+        ],
+      },
+    };
+
+    layoutRef.current = Model.fromJson(layoutConfig);
+  }
 
   const handleGenerateProblem = useCallback(async () => {
     if (!isAuthenticated || !token) {
@@ -56,9 +86,9 @@ const PlaygroundPage: React.FC = () => {
       const newProblem = await generateProblem(token);
       setProblem(newProblem);
       navigate(`/playground/${newProblem.id.substring(2)}`, { replace: true });
-    } catch (error) {
-      console.error(error);
-      setError("Failed to generate problem. Using a default problem.");
+    } catch (requestError) {
+      console.error(requestError);
+      setError('Failed to generate problem. Using a default problem.');
       setProblem(DUMMY_PROBLEMS[0]);
     } finally {
       setIsLoading(false);
@@ -71,8 +101,7 @@ const PlaygroundPage: React.FC = () => {
       setError(null);
 
       if (!isAuthenticated || !token) {
-        // Guest mode: Use dummy data
-        const foundProblem = DUMMY_PROBLEMS.find(p => p.id === id) || DUMMY_PROBLEMS[0];
+        const foundProblem = DUMMY_PROBLEMS.find((p) => p.id === id) || DUMMY_PROBLEMS[0];
         setProblem(foundProblem);
         if (id !== foundProblem.id) {
           navigate(`/playground/${foundProblem.id}`, { replace: true });
@@ -85,7 +114,7 @@ const PlaygroundPage: React.FC = () => {
         if (id) {
           const numericId = parseInt(id, 10);
           const allProblems = await getAllProblems(token);
-          const foundProblem = allProblems.find(p => p.id === `p_${numericId}`);
+          const foundProblem = allProblems.find((p) => p.id === `p_${numericId}`);
 
           if (foundProblem) {
             setProblem(foundProblem);
@@ -100,19 +129,17 @@ const PlaygroundPage: React.FC = () => {
             }
           }
         } else {
-          // No ID in URL, fetch the latest problem for the user
           const latestProblem = await getLatestProblem(token);
           if (latestProblem) {
             setProblem(latestProblem);
             navigate(`/playground/${latestProblem.id.substring(2)}`, { replace: true });
           } else {
-            // No problems exist for this user, prompt to generate one
             setShowGeneratePrompt(true);
           }
         }
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load problem.");
-        setProblem(DUMMY_PROBLEMS[0]); // Fallback
+      } catch (requestError) {
+        setError(requestError instanceof Error ? requestError.message : 'Failed to load problem.');
+        setProblem(DUMMY_PROBLEMS[0]);
       } finally {
         setIsLoading(false);
       }
@@ -120,7 +147,6 @@ const PlaygroundPage: React.FC = () => {
 
     loadProblem();
   }, [id, isAuthenticated, token, navigate]);
-
 
   useEffect(() => {
     if (problem) {
@@ -133,76 +159,13 @@ const PlaygroundPage: React.FC = () => {
     }
   }, [problem, language]);
 
-  // --- Resizing Logic ---
-  const handleHorizontalMouseMove = useCallback((e: MouseEvent) => {
-    if (!isDraggingHorizontal || !containerRef.current) return;
-    const rect = containerRef.current.getBoundingClientRect();
-    const newWidth = e.clientX - rect.left;
-    const minWidth = 360;
-    const maxWidth = rect.width - 300; // Min width for right panel
-    setLeftPanelWidth(Math.max(minWidth, Math.min(newWidth, maxWidth)));
-  }, [isDraggingHorizontal]);
-
-  const handleVerticalMouseMove = useCallback((e: MouseEvent) => {
-    if (!isDraggingVertical || !rightColumnRef.current) return;
-    const rect = rightColumnRef.current.getBoundingClientRect();
-    const newHeight = e.clientY - rect.top;
-    const minHeight = 100; // Min height for editor
-    const maxHeight = rect.height - 100; // Min height for console
-    const finalHeight = Math.max(minHeight, Math.min(newHeight, maxHeight));
-    setEditorPanelHeight(finalHeight);
-    setIsConsoleOpen(true); // Dragging always opens the console
-    lastEditorHeight.current = finalHeight;
-  }, [isDraggingVertical]);
-
-  const handleMouseUp = useCallback(() => {
-    setIsDraggingHorizontal(false);
-    setIsDraggingVertical(false);
-  }, []);
-
-  useEffect(() => {
-    if (isDraggingHorizontal) {
-      document.addEventListener('mousemove', handleHorizontalMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
-      document.body.style.cursor = 'col-resize';
-      document.body.style.userSelect = 'none';
-    } else if (isDraggingVertical) {
-      document.addEventListener('mousemove', handleVerticalMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
-      document.body.style.cursor = 'row-resize';
-      document.body.style.userSelect = 'none';
-    } else {
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-    }
-
-    return () => {
-      document.removeEventListener('mousemove', handleHorizontalMouseMove);
-      document.removeEventListener('mousemove', handleVerticalMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [isDraggingHorizontal, isDraggingVertical, handleHorizontalMouseMove, handleVerticalMouseMove, handleMouseUp]);
-
-  const toggleConsole = () => {
-    const isCurrentlyOpen = isConsoleOpen;
-    setIsConsoleOpen(!isCurrentlyOpen);
-    if (isCurrentlyOpen) {
-      lastEditorHeight.current = editorPanelHeight;
-      if (rightColumnRef.current) {
-        const containerHeight = rightColumnRef.current.offsetHeight;
-        setEditorPanelHeight(containerHeight - 48);
-      }
-    } else {
-      setEditorPanelHeight(lastEditorHeight.current < 100 ? 400 : lastEditorHeight.current);
-    }
-  };
-
-  const handleRunCode = async () => {
+  const handleRunCode = useCallback(async () => {
     if (isProcessing) return;
     if (!isAuthenticated) {
       openLoginModal();
       return;
     }
+
     setActiveConsoleView('run');
     setIsProcessing(true);
     setRunOutput('');
@@ -212,19 +175,21 @@ const PlaygroundPage: React.FC = () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          code: code,
+          code,
           input: customInput,
-          language: language,
+          language,
         }),
       });
 
       const result = await response.json();
 
       if (!response.ok) {
-        const errorMsg = result.error ? `Error: ${result.error}\nDetails: ${result.details || 'No additional details.'}` : `HTTP Error: ${response.status} ${response.statusText}`;
+        const errorMsg = result.error
+          ? `Error: ${result.error}\nDetails: ${result.details || 'No additional details.'}`
+          : `HTTP Error: ${response.status} ${response.statusText}`;
         throw new Error(errorMsg);
       }
 
@@ -234,13 +199,29 @@ const PlaygroundPage: React.FC = () => {
         const errorMsg = `Error: ${result.error}\nDetails: ${result.details || 'No additional details.'}`;
         setRunOutput(errorMsg);
       }
-    } catch (error) {
-      console.error('Failed to run code:', error);
-      setRunOutput(`An error occurred while running the code.\nPlease check the browser console for more details.\nError: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } catch (requestError) {
+      console.error('Failed to run code:', requestError);
+      setRunOutput(
+        `An error occurred while running the code.\nPlease check the browser console for more details.\nError: ${
+          requestError instanceof Error ? requestError.message : 'Unknown error'
+        }`
+      );
     } finally {
       setIsProcessing(false);
     }
-  };
+  }, [isProcessing, isAuthenticated, openLoginModal, token, code, customInput, language]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const runShortcut = (event.ctrlKey || event.metaKey) && event.key === 'Enter';
+      if (!runShortcut) return;
+      event.preventDefault();
+      handleRunCode();
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleRunCode]);
 
   const handleSubmitCode = async () => {
     if (isProcessing || !problem) return;
@@ -260,12 +241,12 @@ const PlaygroundPage: React.FC = () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          code: code,
-          language: language,
-          problemId: problemId
+          code,
+          language,
+          problemId,
         }),
       });
 
@@ -274,36 +255,264 @@ const PlaygroundPage: React.FC = () => {
       if (response.ok && result.success) {
         setSubmissionResult({
           status: 'Accepted',
-          message: 'Congratulations! Your solution was accepted.'
+          message: 'Congratulations! Your solution was accepted.',
         });
         if (result.isSolved) {
-          setProblem(p => p ? { ...p, isSolved: true } : null);
+          setProblem((previous) => (previous ? { ...previous, isSolved: true } : null));
         }
       } else {
         setSubmissionResult({
           status: 'Error',
-          message: result.error || 'Submission failed. Please try again.'
+          message: result.error || 'Submission failed. Please try again.',
         });
       }
-
-    } catch (error) {
-      console.error('Failed to submit code:', error);
+    } catch (requestError) {
+      console.error('Failed to submit code:', requestError);
       setSubmissionResult({
         status: 'Error',
-        message: `An error occurred while submitting. Error: ${error instanceof Error ? error.message : 'Unknown error'}`
+        message: `An error occurred while submitting. Error: ${
+          requestError instanceof Error ? requestError.message : 'Unknown error'
+        }`,
       });
     } finally {
       setIsProcessing(false);
     }
   };
 
+  const editorLanguage = language === 'cpp' ? 'cpp' : 'javascript';
+
+  const problemPanel = (
+    <Card className="h-full overflow-y-auto">
+      {isLoading && <ProblemSkeleton />}
+      {!isLoading && error && (
+        <div className="p-24 text-center text-light-danger dark:text-dark-danger">
+          <h2 className="font-bold mb-8">Error</h2>
+          <p>{error}</p>
+        </div>
+      )}
+      {!isLoading && !error && problem && (
+        <div className="p-24 space-y-24">
+          <div>
+            <div className="flex justify-between items-start mb-8 gap-16">
+              <h1 className="text-xl font-bold">{problem.title}</h1>
+              <Pill type="difficulty" value={problem.difficulty} />
+            </div>
+            <div className="flex flex-wrap gap-8">
+              {problem.tags.map((tag) => <Pill key={tag} type="tag" value={tag} />)}
+            </div>
+          </div>
+          <div className="text-sm text-light-text-secondary dark:text-dark-text-secondary space-x-16">
+            <span>Time: {problem.timeLimit}</span>
+            <span>Memory: {problem.memoryLimit}</span>
+          </div>
+          <div className="text-sm leading-7 whitespace-pre-wrap text-light-text-secondary dark:text-dark-text-secondary">
+            {problem.description}
+          </div>
+
+          {problem.examples.map((ex, i) => (
+            <div key={i}>
+              <h3 className="font-semibold mb-8 text-light-text-primary dark:text-dark-text-primary">Example {i + 1}:</h3>
+              <div className="p-16 bg-light-surface-2 dark:bg-dark-surface-2 rounded-md font-mono text-xs space-y-8">
+                <div>
+                  <strong className="font-semibold block mb-4">Input:</strong>
+                  <pre className="p-8 bg-light-bg dark:bg-dark-bg rounded-md whitespace-pre-wrap">{ex.input}</pre>
+                </div>
+                <div>
+                  <strong className="font-semibold block mb-4">Output:</strong>
+                  <pre className="p-8 bg-light-bg dark:bg-dark-bg rounded-md whitespace-pre-wrap">{ex.output}</pre>
+                </div>
+                {ex.explanation && (
+                  <div>
+                    <strong className="font-semibold block mb-4">Explanation:</strong>
+                    <p className="whitespace-normal font-sans">{ex.explanation}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+
+          {!isAuthenticated && (
+            <div className="!mt-32 p-16 bg-light-surface-2 dark:bg-dark-surface-2 rounded-md text-center text-sm">
+              <p className="text-light-text-secondary dark:text-dark-text-secondary">
+                <button onClick={openLoginModal} className="text-light-accent dark:text-dark-accent font-semibold hover:underline">
+                  Log in
+                </button>{' '}
+                to track your progress.
+              </p>
+            </div>
+          )}
+
+          <div className="flex flex-wrap gap-16">
+            <Button onClick={handleGenerateProblem}>Generate New</Button>
+            <div className="relative inline-block" title={!isAuthenticated ? 'Log in to save your code' : 'Save code'}>
+              <Button variant="secondary" disabled={!isAuthenticated}>Save</Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+
+  const editorPanel = (
+    <Card className="flex flex-col h-full">
+      <div className="flex items-center justify-between p-8 border-b border-light-border dark:border-dark-border flex-shrink-0">
+        <div className="flex items-center gap-8">
+          <select
+            value={language}
+            onChange={(e) => setLanguage(e.target.value as Language)}
+            className="bg-transparent rounded-md text-sm p-8 focus:ring-1 focus:ring-light-accent dark:focus:ring-dark-accent"
+            aria-label="Select language"
+          >
+            <option value="js">JavaScript</option>
+            <option value="cpp">C++</option>
+          </select>
+          <span className="text-xs text-light-text-secondary dark:text-dark-text-secondary hidden md:inline">
+            Ctrl/Cmd + Enter to run
+          </span>
+        </div>
+        <div className="flex items-center gap-8">
+          <Button variant="secondary" size="sm" aria-label="Run code (Ctrl+Enter)" onClick={handleRunCode} disabled={isProcessing}>
+            {isProcessing && activeConsoleView === 'run' ? 'Running...' : 'Run'}
+          </Button>
+          <Button size="sm" aria-label="Submit solution" onClick={handleSubmitCode} disabled={isProcessing}>
+            {isProcessing && activeConsoleView === 'submit' ? 'Submitting...' : 'Submit'}
+          </Button>
+        </div>
+      </div>
+      <div className="flex-1 overflow-hidden">
+        <Editor
+          language={editorLanguage}
+          value={code}
+          onChange={(value) => setCode(value ?? '')}
+          theme={theme === 'dark' ? 'vs-dark' : 'vs'}
+          options={{
+            fontSize: 14,
+            minimap: { enabled: false },
+            automaticLayout: true,
+            tabSize: 2,
+            scrollBeyondLastLine: false,
+            wordWrap: 'on',
+            padding: { top: 14, bottom: 14 },
+            suggestOnTriggerCharacters: true,
+            quickSuggestions: true,
+            tabCompletion: 'on',
+          }}
+        />
+      </div>
+    </Card>
+  );
+
+  const consolePanel = (
+    <Card className="h-full flex flex-col">
+      <div className="flex items-center justify-between p-8 border-b border-light-border dark:border-dark-border">
+        <h3 className="text-sm font-semibold">Console</h3>
+        <div className="flex items-center gap-8">
+          <button
+            onClick={() => setActiveConsoleView('run')}
+            className={`px-12 py-4 text-xs rounded-md border ${
+              activeConsoleView === 'run'
+                ? 'border-light-accent text-light-accent dark:border-dark-accent dark:text-dark-accent'
+                : 'border-light-border text-light-text-secondary dark:border-dark-border dark:text-dark-text-secondary'
+            }`}
+          >
+            Run
+          </button>
+          <button
+            onClick={() => setActiveConsoleView('submit')}
+            className={`px-12 py-4 text-xs rounded-md border ${
+              activeConsoleView === 'submit'
+                ? 'border-light-accent text-light-accent dark:border-dark-accent dark:text-dark-accent'
+                : 'border-light-border text-light-text-secondary dark:border-dark-border dark:text-dark-text-secondary'
+            }`}
+          >
+            Submit
+          </button>
+        </div>
+      </div>
+      <div className="flex-grow flex flex-col overflow-y-auto">
+        {activeConsoleView === 'run' ? (
+          <>
+            <div className="flex flex-col p-16 border-b border-light-border dark:border-dark-border min-h-[120px]">
+              <h4 className="text-xs font-semibold mb-8 text-light-text-secondary dark:text-dark-text-secondary uppercase tracking-wider">
+                Custom Input
+              </h4>
+              <textarea
+                value={customInput}
+                onChange={(e) => setCustomInput(e.target.value)}
+                className="w-full h-full bg-light-surface dark:bg-dark-surface font-mono text-sm resize-none outline-none focus:outline-none leading-relaxed text-light-text-primary dark:text-dark-text-primary rounded-md p-8"
+                spellCheck="false"
+                placeholder="Enter your test cases here..."
+              />
+            </div>
+            <div className="flex-grow flex flex-col p-16 overflow-y-auto">
+              <h4 className="text-xs font-semibold mb-8 text-light-text-secondary dark:text-dark-text-secondary uppercase tracking-wider">Output</h4>
+              {isProcessing ? (
+                <div className="flex items-center gap-8 text-sm text-light-text-secondary dark:text-dark-text-secondary">
+                  <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-light-accent dark:border-dark-accent"></div>
+                  <span>Running...</span>
+                </div>
+              ) : (
+                <pre className="font-mono text-sm whitespace-pre-wrap text-light-text-secondary dark:text-dark-text-secondary">{runOutput}</pre>
+              )}
+            </div>
+          </>
+        ) : (
+          <div className="p-16">
+            {isProcessing ? (
+              <div className="flex items-center gap-8 text-sm text-light-text-secondary dark:text-dark-text-secondary">
+                <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-light-accent dark:border-dark-accent"></div>
+                <span>Submitting against hidden test cases...</span>
+              </div>
+            ) : submissionResult ? (
+              <div
+                className={`p-16 rounded-md ${
+                  submissionResult.status === 'Accepted'
+                    ? 'bg-green-100 dark:bg-green-900/50 border border-green-200 dark:border-green-800'
+                    : 'bg-red-100 dark:bg-red-900/50 border border-red-200 dark:border-red-800'
+                }`}
+              >
+                <h3
+                  className={`text-lg font-bold ${
+                    submissionResult.status === 'Accepted' ? 'text-light-success dark:text-dark-success' : 'text-light-danger dark:text-dark-danger'
+                  }`}
+                >
+                  {submissionResult.status === 'Accepted' ? 'Accepted' : 'Submission Failed'}
+                </h3>
+                <p className="mt-8 text-sm text-light-text-secondary dark:text-dark-text-secondary">{submissionResult.message}</p>
+              </div>
+            ) : (
+              <div className="text-sm text-light-text-secondary dark:text-dark-text-secondary">
+                Submit your code to see the results against hidden test cases.
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </Card>
+  );
+
+  const layoutFactory = useCallback(
+    (node: TabNode) => {
+      const component = node.getComponent();
+      if (component === 'problem') return problemPanel;
+      if (component === 'editor') return editorPanel;
+      if (component === 'console') return consolePanel;
+      return <div />;
+    },
+    [problemPanel, editorPanel, consolePanel]
+  );
+
+  const layoutThemeClass = useMemo(
+    () => (theme === 'dark' ? 'flexlayout__theme_dark' : 'flexlayout__theme_light'),
+    [theme]
+  );
+
   const GenerateProblemModal = () => (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
       <div className="bg-light-surface dark:bg-dark-surface rounded-md shadow-soft dark:shadow-soft-dark p-32 text-center animate-scale-in">
         <h2 className="text-xl font-bold mb-16">Welcome to the Playground!</h2>
         <p className="text-light-text-secondary dark:text-dark-text-secondary mb-24 max-w-sm">
-          It looks like you don't have any generated problems yet.
-          Let's create one for you.
+          It looks like you don't have any generated problems yet. Let's create one for you.
         </p>
         <Button onClick={handleGenerateProblem}>Generate Your First Problem</Button>
       </div>
@@ -313,198 +522,8 @@ const PlaygroundPage: React.FC = () => {
   return (
     <>
       {showGeneratePrompt && <GenerateProblemModal />}
-      <div ref={containerRef} className="h-[calc(100vh-64px)] flex p-16">
-        <div style={{ width: `${leftPanelWidth}px` }} className="flex-shrink-0 h-full">
-          <Card className="flex flex-col h-full overflow-y-auto">
-            {isLoading && <ProblemSkeleton />}
-            {!isLoading && error && (
-              <div className="p-24 text-center text-light-danger dark:text-dark-danger">
-                <h2 className="font-bold mb-8">Error</h2>
-                <p>{error}</p>
-              </div>
-            )}
-            {!isLoading && !error && problem && (
-              <div className="p-24 space-y-24">
-                <div>
-                  <div className="flex justify-between items-start mb-8">
-                    <h1 className="text-xl font-bold">{problem.title}</h1>
-                    <Pill type="difficulty" value={problem.difficulty} />
-                  </div>
-                  <div className="flex flex-wrap gap-8">
-                    {problem.tags.map(tag => <Pill key={tag} type="tag" value={tag} />)}
-                  </div>
-                </div>
-                <div className="text-sm text-light-text-secondary dark:text-dark-text-secondary space-x-16">
-                  <span>Time: {problem.timeLimit}</span>
-                  <span>Memory: {problem.memoryLimit}</span>
-                </div>
-                <div className="prose prose-sm dark:prose-invert max-w-none text-light-text-secondary dark:text-dark-text-secondary">
-                  <p>{problem.description}</p>
-                </div>
-
-                {problem.examples.map((ex, i) => (
-                  <div key={i}>
-                    <h3 className="font-semibold mb-8 text-light-text-primary dark:text-dark-text-primary">Example {i + 1}:</h3>
-                    <div className="p-16 bg-light-surface-2 dark:bg-dark-surface-2 rounded-md font-mono text-xs space-y-8">
-                      <div>
-                        <strong className="font-semibold block mb-4">Input:</strong>
-                        <pre className="p-8 bg-light-bg dark:bg-dark-bg rounded-md whitespace-pre-wrap">{ex.input}</pre>
-                      </div>
-                      <div>
-                        <strong className="font-semibold block mb-4">Output:</strong>
-                        <pre className="p-8 bg-light-bg dark:bg-dark-bg rounded-md whitespace-pre-wrap">{ex.output}</pre>
-                      </div>
-                      {ex.explanation && (
-                        <div>
-                          <strong className="font-semibold block mb-4">Explanation:</strong>
-                          <p className="whitespace-normal font-sans">{ex.explanation}</p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-
-                {!isAuthenticated && (
-                  <div className="!mt-32 p-16 bg-light-surface-2 dark:bg-dark-surface-2 rounded-md text-center text-sm">
-                    <p className="text-light-text-secondary dark:text-dark-text-secondary">
-                      <button onClick={openLoginModal} className="text-light-accent dark:text-dark-accent font-semibold hover:underline">
-                        Log in
-                      </button> to track your progress.
-                    </p>
-                  </div>
-                )}
-
-                <div className="flex flex-wrap gap-16">
-                  <Button onClick={handleGenerateProblem}>Generate New</Button>
-                  <div className="relative inline-block" title={!isAuthenticated ? "Log in to save your code" : "Save code"}>
-                    <Button variant="secondary" disabled={!isAuthenticated}>Save</Button>
-                  </div>
-                </div>
-              </div>
-            )}
-          </Card>
-        </div>
-
-        <div
-          className="w-8 flex-shrink-0 cursor-col-resize flex items-center justify-center group"
-          onMouseDown={() => setIsDraggingHorizontal(true)}
-        >
-          <div className="w-1 h-32 bg-light-border dark:bg-dark-border rounded-full group-hover:bg-light-accent dark:group-hover:bg-dark-accent transition-colors" />
-        </div>
-
-        <div ref={rightColumnRef} className="flex-1 flex flex-col h-full">
-          <div style={{ height: `${editorPanelHeight}px` }} className="min-h-[100px]">
-            <Card className="flex-grow flex flex-col h-full">
-              <div className="flex items-center justify-between p-8 border-b border-light-border dark:border-dark-border flex-shrink-0">
-                <div className="flex items-center gap-8">
-                  <select
-                    value={language}
-                    onChange={(e) => setLanguage(e.target.value as Language)}
-                    className="bg-transparent rounded-md text-sm p-8 focus:ring-1 focus:ring-light-accent dark:focus:ring-dark-accent"
-                    aria-label="Select language"
-                  >
-                    <option value="js">JavaScript</option>
-                    <option value="cpp">C++</option>
-                  </select>
-                </div>
-                <div className="flex items-center gap-8">
-                  <Button variant="secondary" size="sm" aria-label="Run code (Ctrl+Enter)" onClick={handleRunCode} disabled={isProcessing}>
-                    {isProcessing && activeConsoleView === 'run' ? 'Running...' : 'Run'}
-                  </Button>
-                  <Button size="sm" aria-label="Submit solution" onClick={handleSubmitCode} disabled={isProcessing}>
-                    {isProcessing && activeConsoleView === 'submit' ? 'Submitting...' : 'Submit'}
-                  </Button>
-                </div>
-              </div>
-              <div className="flex-grow flex font-mono text-sm bg-[#1e1e1e] p-8 overflow-hidden">
-                <div className="text-right text-gray-500 pr-16 select-none pt-2 overflow-y-auto">
-                  {code.split('\n').map((_, i) => <div key={i}>{i + 1}</div>)}
-                </div>
-                <textarea
-                  value={code}
-                  onChange={(e) => setCode(e.target.value)}
-                  className="flex-grow bg-transparent text-gray-300 resize-none outline-none focus:outline-none leading-relaxed pt-2"
-                  spellCheck="false"
-                  aria-label="Code editor"
-                />
-              </div>
-            </Card>
-          </div>
-
-          <div
-            className="h-8 flex-shrink-0 cursor-row-resize flex items-center justify-center group"
-            onMouseDown={() => setIsDraggingVertical(true)}
-          >
-            <div className="h-1 w-32 bg-light-border dark:bg-dark-border rounded-full group-hover:bg-light-accent dark:group-hover:bg-dark-accent transition-colors" />
-          </div>
-
-          <div className="flex-1 min-h-[100px]">
-            <Card className="flex flex-col h-full">
-              <div className="flex items-center justify-between p-8 border-b border-light-border dark:border-dark-border flex-shrink-0">
-                <h3 className="text-sm font-semibold">Console</h3>
-                <button
-                  onClick={toggleConsole}
-                  className="p-4 rounded-md hover:bg-light-surface-2 dark:hover:bg-dark-surface-2"
-                  aria-label={isConsoleOpen ? 'Collapse console' : 'Expand console'}
-                  aria-expanded={isConsoleOpen}
-                >
-                  <ChevronDownIcon className={`w-16 h-16 text-light-text-secondary dark:text-dark-text-secondary transition-transform duration-200 ${isConsoleOpen ? 'rotate-180' : 'rotate-0'}`} />
-                </button>
-              </div>
-              <div className="flex-grow flex flex-col overflow-y-auto">
-                {activeConsoleView === 'run' ? (
-                  <>
-                    <div className="flex flex-col p-16 border-b border-light-border dark:border-dark-border" style={{ minHeight: '120px', height: '45%' }}>
-                      <h4 className="text-xs font-semibold mb-8 text-light-text-secondary dark:text-dark-text-secondary uppercase tracking-wider">Test Against Custom Input</h4>
-                      <textarea
-                        value={customInput}
-                        onChange={(e) => setCustomInput(e.target.value)}
-                        className="w-full h-full bg-light-surface dark:bg-dark-surface font-mono text-sm resize-none outline-none focus:outline-none leading-relaxed text-light-text-primary dark:text-dark-text-primary"
-                        spellCheck="false"
-                        placeholder="Enter your test cases here..."
-                      />
-                    </div>
-                    <div className="flex-grow flex flex-col p-16 overflow-y-auto">
-                      <h4 className="text-xs font-semibold mb-8 text-light-text-secondary dark:text-dark-text-secondary uppercase tracking-wider">Output</h4>
-                      {isProcessing ? (
-                        <div className="flex items-center gap-8 text-sm text-light-text-secondary dark:text-dark-text-secondary">
-                          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-light-accent dark:border-dark-accent"></div>
-                          <span>Running...</span>
-                        </div>
-                      ) : (
-                        <pre className="font-mono text-sm whitespace-pre-wrap text-light-text-secondary dark:text-dark-text-secondary">
-                          {runOutput}
-                        </pre>
-                      )}
-                    </div>
-                  </>
-                ) : (
-                  <div className="p-16">
-                    {isProcessing ? (
-                      <div className="flex items-center gap-8 text-sm text-light-text-secondary dark:text-dark-text-secondary">
-                        <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-light-accent dark:border-dark-accent"></div>
-                        <span>Submitting against hidden test cases...</span>
-                      </div>
-                    ) : submissionResult ? (
-                      <div className={`p-16 rounded-md ${submissionResult.status === 'Accepted' ? 'bg-green-100 dark:bg-green-900/50 border border-green-200 dark:border-green-800' : 'bg-red-100 dark:bg-red-900/50 border border-red-200 dark:border-red-800'}`}>
-                        <h3 className={`text-lg font-bold ${submissionResult.status === 'Accepted' ? 'text-light-success dark:text-dark-success' : 'text-light-danger dark:text-dark-danger'}`}>
-                          {submissionResult.status === 'Accepted' ? 'Accepted' : 'Submission Failed'}
-                        </h3>
-                        <p className="mt-8 text-sm text-light-text-secondary dark:text-dark-text-secondary">
-                          {submissionResult.message}
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="text-sm text-light-text-secondary dark:text-dark-text-secondary">
-                        Submit your code to see the results against hidden test cases.
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            </Card>
-          </div>
-        </div>
+      <div className="h-[calc(100vh-64px)] p-16">
+        <Layout model={layoutRef.current} factory={layoutFactory} className={layoutThemeClass} />
       </div>
     </>
   );

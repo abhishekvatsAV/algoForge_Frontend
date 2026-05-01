@@ -10,6 +10,9 @@
   },
   "dependencies": {
     "@google/genai": "^1.22.0",
+    "@monaco-editor/react": "^4.7.0",
+    "flexlayout-react": "^0.8.17",
+    "monaco-editor": "^0.52.2",
     "react-dom": "^19.2.0",
     "react": "^19.2.0",
     "react-router-dom": "^7.9.3"
