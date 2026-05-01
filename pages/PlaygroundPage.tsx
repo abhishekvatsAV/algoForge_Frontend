@@ -522,7 +522,7 @@ const PlaygroundPage: React.FC = () => {
   return (
     <>
       {showGeneratePrompt && <GenerateProblemModal />}
-      <div className="h-[calc(100vh-64px)] p-16">
+      <div className="relative h-[calc(100vh-64px)] p-16">
         <Layout model={layoutRef.current} factory={layoutFactory} className={layoutThemeClass} />
       </div>
     </>
