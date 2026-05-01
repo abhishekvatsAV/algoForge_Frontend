@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 // import { BACKEND_URL } from '../config';
 const BACKEND_URL = process.env.BACKEND_URL;
+const GUEST_EMAIL = 'guest@user.com';
+const GUEST_PASSWORD = 'guest@123';
 interface User {
   id: number;
   email: string;
@@ -96,7 +98,21 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
   
   const guestLogin = async () => {
-    await login('dummy@user.com', 'dummy');
+    try {
+      await login(GUEST_EMAIL, GUEST_PASSWORD);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '';
+      const shouldCreateGuest =
+        message.toLowerCase().includes('does not exists') ||
+        message.toLowerCase().includes('not found');
+
+      if (!shouldCreateGuest) {
+        throw error;
+      }
+
+      // Self-heal for fresh deployments where guest account is not created yet.
+      await signup(GUEST_EMAIL, GUEST_PASSWORD);
+    }
   };
 
   const logout = useCallback(() => {
